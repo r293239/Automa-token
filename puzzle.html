@@ -5,10 +5,278 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ATM Puzzle - AutomaToken</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="sha256.js"></script>
-    <script src="ethers.min.js"></script>
-    <script src="puzzle.js"></script>
-    <script src="contract.js"></script>
+    <!-- Inline all dependencies for self-contained operation -->
+    <script>
+        // Simple SHA-256 implementation
+        function sha256(input) {
+            function rightRotate(value, amount) {
+                return (value >>> amount) | (value << (32 - amount));
+            }
+            
+            function sha256Hash(input) {
+                const h = [
+                    0x6a09e667, 0xbb67ae37, 0x3c6ef372, 0xa54ff53a,
+                    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+                ];
+                
+                const k = [
+                    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+                    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+                    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+                    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+                    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+                    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+                    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+                    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+                ];
+                
+                input += String.fromCharCode(0x80);
+                while ((input.length % 64) !== 56) {
+                    input += String.fromCharCode(0x00);
+                }
+                
+                const inputLength = (arguments[0].length * 8).toString(2);
+                input += String.fromCharCode(0x00).repeat(8 - inputLength.length / 8);
+                input += inputLength.split('').map(bit => String.fromCharCode(parseInt(bit, 2))).join('');
+                
+                for (let i = 0; i < input.length; i += 64) {
+                    const chunk = input.slice(i, i + 64);
+                    const w = [];
+                    
+                    for (let j = 0; j < 64; j += 4) {
+                        w.push((chunk.charCodeAt(j) << 24) | (chunk.charCodeAt(j + 1) << 16) | 
+                               (chunk.charCodeAt(j + 2) << 8) | chunk.charCodeAt(j + 3));
+                    }
+                    
+                    for (let j = 16; j < 64; j++) {
+                        const s0 = rightRotate(w[j - 15], 7) ^ rightRotate(w[j - 15], 18) ^ (w[j - 15] >>> 3);
+                        const s1 = rightRotate(w[j - 2], 17) ^ rightRotate(w[j - 2], 19) ^ (w[j - 2] >>> 10);
+                        w[j] = (w[j - 16] + s0 + w[j - 7] + s1) & 0xffffffff;
+                    }
+                    
+                    let [a, b, c, d, e, f, g, h_temp] = h;
+                    
+                    for (let j = 0; j < 64; j++) {
+                        const S1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
+                        const ch = (e & f) ^ (~e & g);
+                        const temp1 = (h_temp + S1 + ch + k[j] + w[j]) & 0xffffffff;
+                        const S0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22);
+                        const maj = (a & b) ^ (a & c) ^ (b & c);
+                        const temp2 = (S0 + maj) & 0xffffffff;
+                        
+                        h_temp = g;
+                        g = f;
+                        f = e;
+                        e = (d + temp1) & 0xffffffff;
+                        d = c;
+                        c = b;
+                        b = a;
+                        a = (temp1 + temp2) & 0xffffffff;
+                    }
+                    
+                    h[0] = (h[0] + a) & 0xffffffff;
+                    h[1] = (h[1] + b) & 0xffffffff;
+                    h[2] = (h[2] + c) & 0xffffffff;
+                    h[3] = (h[3] + d) & 0xffffffff;
+                    h[4] = (h[4] + e) & 0xffffffff;
+                    h[5] = (h[5] + f) & 0xffffffff;
+                    h[6] = (h[6] + g) & 0xffffffff;
+                    h[7] = (h[7] + h_temp) & 0xffffffff;
+                }
+                
+                return h.map(val => val.toString(16).padStart(8, '0')).join('');
+            }
+            
+            return sha256Hash(input);
+        }
+
+        // Simple puzzle generator
+        class PuzzleGenerator {
+            constructor() {
+                this.currentPuzzle = null;
+                this.currentHash = null;
+            }
+
+            generatePuzzle() {
+                const puzzleTypes = [
+                    this.generateMathPuzzle.bind(this),
+                    this.generateSequencePuzzle.bind(this),
+                    this.generateLogicPuzzle.bind(this),
+                    this.generateWordPuzzle.bind(this)
+                ];
+                
+                const randomType = Math.floor(Math.random() * puzzleTypes.length);
+                const puzzle = puzzleTypes[randomType]();
+                
+                this.currentPuzzle = puzzle;
+                this.currentHash = sha256(puzzle.correctAnswer.toString());
+                
+                return {
+                    question: puzzle.question,
+                    hash: this.currentHash,
+                    difficulty: puzzle.difficulty || 'medium'
+                };
+            }
+
+            generateMathPuzzle() {
+                const difficulty = Math.random();
+                
+                if (difficulty < 0.4) {
+                    // Easy: Simple addition/subtraction
+                    const a = Math.floor(Math.random() * 20) + 1;
+                    const b = Math.floor(Math.random() * 20) + 1;
+                    const operation = Math.random() > 0.5 ? '+' : '-';
+                    
+                    if (operation === '+') {
+                        return {
+                            question: `What is ${a} + ${b}?`,
+                            correctAnswer: a + b,
+                            difficulty: 'easy'
+                        };
+                    } else {
+                        const larger = Math.max(a, b);
+                        const smaller = Math.min(a, b);
+                        return {
+                            question: `What is ${larger} - ${smaller}?`,
+                            correctAnswer: larger - smaller,
+                            difficulty: 'easy'
+                        };
+                    }
+                } else if (difficulty < 0.7) {
+                    // Medium: Multiplication
+                    const a = Math.floor(Math.random() * 12) + 2;
+                    const b = Math.floor(Math.random() * 12) + 2;
+                    
+                    return {
+                        question: `What is ${a} × ${b}?`,
+                        correctAnswer: a * b,
+                        difficulty: 'medium'
+                    };
+                } else {
+                    // Hard: More complex operations
+                    const a = Math.floor(Math.random() * 10) + 2;
+                    const b = Math.floor(Math.random() * 10) + 2;
+                    const c = Math.floor(Math.random() * 5) + 2;
+                    
+                    return {
+                        question: `What is (${a} + ${b}) × ${c}?`,
+                        correctAnswer: (a + b) * c,
+                        difficulty: 'hard'
+                    };
+                }
+            }
+
+            generateSequencePuzzle() {
+                const sequences = [
+                    {
+                        sequence: [2, 4, 6, 8],
+                        next: 10,
+                        question: "What comes next: 2, 4, 6, 8, ?"
+                    },
+                    {
+                        sequence: [1, 4, 9, 16],
+                        next: 25,
+                        question: "What comes next: 1, 4, 9, 16, ?"
+                    },
+                    {
+                        sequence: [3, 6, 12, 24],
+                        next: 48,
+                        question: "What comes next: 3, 6, 12, 24, ?"
+                    },
+                    {
+                        sequence: [5, 10, 15, 20],
+                        next: 25,
+                        question: "What comes next: 5, 10, 15, 20, ?"
+                    }
+                ];
+                
+                const randomSequence = sequences[Math.floor(Math.random() * sequences.length)];
+                
+                return {
+                    question: randomSequence.question,
+                    correctAnswer: randomSequence.next,
+                    difficulty: 'medium'
+                };
+            }
+
+            generateLogicPuzzle() {
+                const puzzles = [
+                    {
+                        question: "A farmer has 17 sheep, and all but 9 die. How many sheep are left?",
+                        correctAnswer: 9
+                    },
+                    {
+                        question: "If you're running a race and you pass the person in 2nd place, what place are you in?",
+                        correctAnswer: 2
+                    },
+                    {
+                        question: "What number comes next: 1, 1, 2, 3, 5, 8, ?",
+                        correctAnswer: 13
+                    }
+                ];
+                
+                const randomPuzzle = puzzles[Math.floor(Math.random() * puzzles.length)];
+                
+                return {
+                    question: randomPuzzle.question,
+                    correctAnswer: randomPuzzle.correctAnswer,
+                    difficulty: 'hard'
+                };
+            }
+
+            generateWordPuzzle() {
+                const puzzles = [
+                    {
+                        question: "Unscramble: NOKET (hint: crypto unit)",
+                        correctAnswer: "token"
+                    },
+                    {
+                        question: "What 5-letter word becomes shorter when you add letters?",
+                        correctAnswer: "short"
+                    },
+                    {
+                        question: "Rearrange LISTEN to make a word meaning 'quiet'",
+                        correctAnswer: "silent"
+                    }
+                ];
+                
+                const randomPuzzle = puzzles[Math.floor(Math.random() * puzzles.length)];
+                
+                return {
+                    question: randomPuzzle.question,
+                    correctAnswer: randomPuzzle.correctAnswer,
+                    difficulty: 'medium'
+                };
+            }
+
+            verifyAnswer(userAnswer) {
+                if (!this.currentPuzzle) {
+                    return { success: false, message: "No puzzle generated yet" };
+                }
+
+                const normalizedUser = userAnswer.toString().toLowerCase().trim();
+                const normalizedCorrect = this.currentPuzzle.correctAnswer.toString().toLowerCase().trim();
+                
+                const isCorrect = normalizedUser === normalizedCorrect;
+                
+                return {
+                    success: isCorrect,
+                    correctAnswer: this.currentPuzzle.correctAnswer,
+                    hash: this.currentHash,
+                    message: isCorrect ? "Correct! You solved it!" : "Incorrect answer. Try again!"
+                };
+            }
+
+            getCurrentHash() {
+                return this.currentHash;
+            }
+        }
+
+        // Initialize puzzle generator
+        let puzzleGenerator = new PuzzleGenerator();
+        let walletConnected = false;
+        let userAddress = null;
+    </script>
 </head>
 <body>
     <div class="container">
@@ -32,12 +300,15 @@
                 <div class="puzzle-card">
                     <h2>🧮 Solve This Puzzle</h2>
                     <div id="puzzle-content">
-                        <p id="puzzle-question">Click "Generate New Puzzle" to start</p>
+                        <p id="puzzle-question">Loading your first puzzle...</p>
                         <div class="puzzle-input">
-                            <input type="text" id="answer-input" placeholder="Enter your answer" disabled>
+                            <input type="text" id="answer-input" placeholder="Your answer will appear here..." disabled>
                             <button id="check-answer" class="btn-primary" disabled>Check Answer</button>
                         </div>
                         <button id="generate-puzzle" class="btn-secondary">Generate New Puzzle</button>
+                        <div class="puzzle-hint">
+                            <small>💡 Tip: Puzzles auto-generate when you start! Try different types: math, sequences, logic, and word puzzles.</small>
+                        </div>
                     </div>
                 </div>
 
@@ -100,8 +371,299 @@
     <script>
         // Initialize app when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            initializePuzzleApp();
+            console.log('AutomaToken Puzzle App Loading...');
+            setupEventListeners();
+            generateNewPuzzle(); // Auto-generate first puzzle
+            updateTokenStats();
         });
+
+        function setupEventListeners() {
+            // Connect wallet button (simplified for demo)
+            const connectButton = document.getElementById('connect-wallet');
+            if (connectButton) {
+                connectButton.addEventListener('click', () => {
+                    simulateWalletConnection();
+                });
+            }
+
+            // Generate puzzle button
+            const generateButton = document.getElementById('generate-puzzle');
+            if (generateButton) {
+                generateButton.addEventListener('click', () => {
+                    generateNewPuzzle();
+                });
+            }
+
+            // Check answer button
+            const checkButton = document.getElementById('check-answer');
+            if (checkButton) {
+                checkButton.addEventListener('click', () => {
+                    checkPuzzleAnswer();
+                });
+            }
+
+            // Claim token button
+            const claimButton = document.getElementById('claim-token');
+            if (claimButton) {
+                claimButton.addEventListener('click', () => {
+                    simulateTokenClaim();
+                });
+            }
+
+            // Enter key support
+            const answerInput = document.getElementById('answer-input');
+            if (answerInput) {
+                answerInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !answerInput.disabled) {
+                        checkPuzzleAnswer();
+                    }
+                });
+            }
+        }
+
+        function simulateWalletConnection() {
+            const connectButton = document.getElementById('connect-wallet');
+            const walletInfo = document.getElementById('wallet-info');
+            const walletAddress = document.getElementById('wallet-address');
+            
+            showLoading(true);
+            
+            setTimeout(() => {
+                walletConnected = true;
+                userAddress = '0x' + Math.random().toString(16).substr(2, 40);
+                
+                if (connectButton) {
+                    connectButton.textContent = 'Connected ✅';
+                    connectButton.disabled = true;
+                    connectButton.classList.add('connected');
+                }
+                
+                if (walletInfo && walletAddress) {
+                    walletAddress.textContent = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+                    walletInfo.classList.remove('hidden');
+                }
+                
+                showLoading(false);
+                showMessage('Wallet connected successfully! (Demo Mode)', 'success');
+            }, 1500);
+        }
+
+        function generateNewPuzzle() {
+            hideAllMessages();
+            
+            const puzzle = puzzleGenerator.generatePuzzle();
+            
+            const questionElement = document.getElementById('puzzle-question');
+            const answerInput = document.getElementById('answer-input');
+            const checkButton = document.getElementById('check-answer');
+            
+            if (questionElement) {
+                questionElement.innerHTML = `
+                    <div class="puzzle-difficulty">${puzzle.difficulty.toUpperCase()} PUZZLE</div>
+                    ${puzzle.question}
+                `;
+            }
+            
+            if (answerInput) {
+                answerInput.disabled = false;
+                answerInput.value = '';
+                answerInput.focus();
+                answerInput.placeholder = "Enter your answer here...";
+            }
+            
+            if (checkButton) {
+                checkButton.disabled = false;
+                checkButton.textContent = 'Check Answer';
+            }
+            
+            console.log('New puzzle generated:', puzzle.question);
+            console.log('Correct answer:', puzzleGenerator.currentPuzzle.correctAnswer);
+        }
+
+        function checkPuzzleAnswer() {
+            const answerInput = document.getElementById('answer-input');
+            if (!answerInput || !answerInput.value.trim()) {
+                showMessage('Please enter an answer', 'error');
+                return;
+            }
+            
+            const userAnswer = answerInput.value.trim();
+            const result = puzzleGenerator.verifyAnswer(userAnswer);
+            
+            hideAllMessages();
+            
+            if (result.success) {
+                showSuccess('🎉 Correct! You solved the puzzle!');
+                enableClaimButton();
+                answerInput.disabled = true;
+                document.getElementById('check-answer').disabled = true;
+            } else {
+                showError(`❌ ${result.message} The correct answer was: ${result.correctAnswer}`);
+                setTimeout(() => {
+                    generateNewPuzzle();
+                }, 3000);
+            }
+        }
+
+        function simulateTokenClaim() {
+            if (!walletConnected) {
+                showMessage('Please connect your wallet first', 'error');
+                return;
+            }
+            
+            const puzzleHash = puzzleGenerator.getCurrentHash();
+            if (!puzzleHash) {
+                showMessage('No valid puzzle solution found', 'error');
+                return;
+            }
+            
+            showLoading(true);
+            hideAllMessages();
+            
+            // Simulate blockchain transaction
+            setTimeout(() => {
+                const success = Math.random() > 0.1; // 90% success rate for demo
+                
+                if (success) {
+                    const txHash = '0x' + Math.random().toString(16).substr(2, 64);
+                    showTransactionSuccess(txHash);
+                    updateUserBalance(1);
+                    updateTokenStats();
+                    disablePuzzleInterface();
+                } else {
+                    showTransactionError('Transaction failed. Please try again.');
+                }
+                
+                showLoading(false);
+            }, 3000);
+        }
+
+        function updateUserBalance(newBalance) {
+            const balanceElement = document.getElementById('atm-balance');
+            if (balanceElement) {
+                balanceElement.textContent = newBalance.toString();
+            }
+        }
+
+        function updateTokenStats() {
+            const claimedCount = Math.floor(Math.random() * 25) + 1; // Random for demo
+            const availableCount = 100 - claimedCount;
+            
+            const claimedElement = document.getElementById('claimed-count');
+            const availableElement = document.getElementById('available-count');
+            
+            if (claimedElement) claimedElement.textContent = claimedCount + ' ATM';
+            if (availableElement) availableElement.textContent = availableCount + ' ATM';
+        }
+
+        // UI Helper Functions
+        function showLoading(show) {
+            const loading = document.getElementById('loading');
+            if (loading) {
+                loading.classList.toggle('hidden', !show);
+            }
+        }
+
+        function showSuccess(message) {
+            const successBox = document.getElementById('success-message');
+            const resultSection = document.getElementById('result-section');
+            
+            if (successBox && resultSection) {
+                successBox.querySelector('p').textContent = message;
+                successBox.classList.remove('hidden');
+                resultSection.classList.remove('hidden');
+            }
+        }
+
+        function showError(message) {
+            const errorBox = document.getElementById('error-message');
+            const resultSection = document.getElementById('result-section');
+            
+            if (errorBox && resultSection) {
+                errorBox.querySelector('p').textContent = message;
+                errorBox.classList.remove('hidden');
+                resultSection.classList.remove('hidden');
+            }
+        }
+
+        function showTransactionSuccess(txHash) {
+            const txSuccess = document.getElementById('tx-success');
+            const txResult = document.getElementById('transaction-result');
+            const txHashElement = document.getElementById('tx-hash');
+            
+            if (txSuccess && txResult) {
+                if (txHashElement) {
+                    txHashElement.textContent = `${txHash.slice(0, 10)}...${txHash.slice(-8)}`;
+                    txHashElement.title = txHash;
+                }
+                txSuccess.classList.remove('hidden');
+                txResult.classList.remove('hidden');
+            }
+        }
+
+        function showTransactionError(message) {
+            const txError = document.getElementById('tx-error');
+            const txResult = document.getElementById('transaction-result');
+            const txErrorMessage = document.getElementById('tx-error-message');
+            
+            if (txError && txResult) {
+                if (txErrorMessage) txErrorMessage.textContent = message;
+                txError.classList.remove('hidden');
+                txResult.classList.remove('hidden');
+            }
+        }
+
+        function showMessage(message, type = 'info') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = message;
+            messageDiv.style.cssText = `
+                padding: 15px; margin: 15px 0; border-radius: 10px; 
+                background: ${type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#e3f2fd'}; 
+                border: 2px solid ${type === 'success' ? '#00b894' : type === 'error' ? '#e74c3c' : '#2196f3'};
+                color: ${type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#1565c0'};
+                font-weight: 500;
+            `;
+            
+            const puzzleSection = document.querySelector('.puzzle-section');
+            if (puzzleSection) {
+                puzzleSection.insertBefore(messageDiv, puzzleSection.firstChild);
+                setTimeout(() => messageDiv.remove(), 5000);
+            }
+        }
+
+        function hideAllMessages() {
+            const messages = ['success-message', 'error-message', 'tx-success', 'tx-error'];
+            messages.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.classList.add('hidden');
+            });
+            
+            const sections = ['result-section', 'transaction-result'];
+            sections.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.classList.add('hidden');
+            });
+        }
+
+        function enableClaimButton() {
+            const claimButton = document.getElementById('claim-token');
+            if (claimButton) {
+                claimButton.disabled = false;
+                claimButton.classList.add('enabled');
+                claimButton.style.animation = 'pulse 2s infinite';
+            }
+        }
+
+        function disablePuzzleInterface() {
+            const elements = ['generate-puzzle', 'answer-input', 'check-answer', 'claim-token'];
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.disabled = true;
+            });
+            
+            showMessage('Congratulations! You have successfully claimed your ATM token. Each address can only claim once.', 'success');
+        }
     </script>
 </body>
 </html>
