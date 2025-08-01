@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+contract AutomaToken {
+    string public name = "AutomaToken";
+    string public symbol = "ATM";
+    uint8 public decimals = 18;
+    uint256 public totalSupply = 100 * 10**18; // 100 tokens
+    uint256 public maxSupply = 100 * 10**18;
+    uint256 public claimedTokens = 0;
+    
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    mapping(address => bool) public hasClaimed;
+    mapping(bytes32 => bool) public usedPuzzleHashes;
+    
+    address public owner;
+    
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event TokenClaimed(address indexed claimer, bytes32 puzzleHash, uint256 amount);
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can call this function");
+        _;
+    }
+    
+    constructor() {
+        owner = msg.sender;
+        // Owner gets all tokens initially, then distributes them through claims
+        balanceOf[owner] = totalSupply;
+        emit Transfer(address(0), owner, totalSupply);
+    }
+    
+    function transfer(address to, uint256 value) public returns (bool) {
+        require(balanceOf[msg.sender] >= value, "Insufficient balance");
+        require(to != address(0), "Cannot transfer to zero address");
+        
+        balanceOf[msg.sender] -= value;
+        balanceOf[to] += value;
+        emit Transfer(msg.sender, to, value);
+        return true;
+    }
+    
+    function approve(address spender, uint256 value) public returns (bool) {
+        allowance[msg.sender][spender] = value;
+        emit Approval(msg.sender, spender, value);
+        return true;
+    }
+    
+    function transferFrom(address from, address to, uint256 value) public returns (bool) {
+        require(balanceOf[from] >= value, "Insufficient balance");
+        require(allowance[from][msg.sender] >= value, "Insufficient allowance");
+        require(to != address(0), "Cannot transfer to zero address");
+        
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
+        allowance[from][msg.sender] -= value;
+        emit Transfer(from, to, value);
+        return true;
+    }
+    
+    function claimReward(bytes32 puzzleHash) public returns (bool) {
+        require(!hasClaimed[msg.sender], "Address has already claimed a token");
+        require(!usedPuzzleHashes[puzzleHash], "This puzzle solution has already been used");
+        require(claimedTokens < maxSupply, "All tokens have been claimed");
+        require(balanceOf[owner] >= 1 * 10**18, "No more tokens available to claim");
+        
+        // Mark this address and puzzle hash as used
+        hasClaimed[msg.sender] = true;
+        usedPuzzleHashes[puzzleHash] = true;
+        
+        // Transfer 1 token from owner to claimer
+        uint256 rewardAmount = 1 * 10**18; // 1 token
+        balanceOf[owner] -= rewardAmount;
+        balanceOf[msg.sender] += rewardAmount;
+        claimedTokens += rewardAmount;
+        
+        emit Transfer(owner, msg.sender, rewardAmount);
+        emit TokenClaimed(msg.sender, puzzleHash, rewardAmount);
+        
+        return true;
+    }
+    
+    function getClaimedCount() public view returns (uint256) {
+        return claimedTokens / 10**18; // Return number of whole tokens claimed
+    }
+    
+    function getAvailableCount() public view returns (uint256) {
+        return (maxSupply - claimedTokens) / 10**18; // Return number of whole tokens available
+    }
+    
+    function hasAddressClaimed(address addr) public view returns (bool) {
+        return hasClaimed[addr];
+    }
+    
+    function isPuzzleHashUsed(bytes32 puzzleHash) public view returns (bool) {
+        return usedPuzzleHashes[puzzleHash];
+    }
+    
+    // Emergency functions (only owner)
+    function emergencyWithdraw() public onlyOwner {
+        payable(owner).transfer(address(this).balance);
+    }
+    
+    function transferOwnership(address newOwner) public onlyOwner {
+        require(newOwner != address(0), "New owner cannot be zero address");
+        owner = newOwner;
+    }
+}
