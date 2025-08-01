@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATM Puzzle - AutomaToken</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="sha256.js"></script>
+    <script src="ethers.min.js"></script>
+    <script src="puzzle.js"></script>
+    <script src="contract.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1><a href="index.html">🧩 AutomaToken</a></h1>
+                <p class="tagline">Solve. Think. Earn.</p>
+            </div>
+        </header>
+
+        <main class="puzzle-main">
+            <div class="wallet-section">
+                <button id="connect-wallet" class="btn-secondary">Connect MetaMask</button>
+                <div id="wallet-info" class="wallet-info hidden">
+                    <p>Connected: <span id="wallet-address"></span></p>
+                    <p>ATM Balance: <span id="atm-balance">0</span></p>
+                </div>
+            </div>
+
+            <div class="puzzle-section">
+                <div class="puzzle-card">
+                    <h2>🧮 Solve This Puzzle</h2>
+                    <div id="puzzle-content">
+                        <p id="puzzle-question">Click "Generate New Puzzle" to start</p>
+                        <div class="puzzle-input">
+                            <input type="text" id="answer-input" placeholder="Enter your answer" disabled>
+                            <button id="check-answer" class="btn-primary" disabled>Check Answer</button>
+                        </div>
+                        <button id="generate-puzzle" class="btn-secondary">Generate New Puzzle</button>
+                    </div>
+                </div>
+
+                <div id="result-section" class="result-section hidden">
+                    <div id="success-message" class="success-box hidden">
+                        <h3>✅ Correct Answer!</h3>
+                        <p>You can now claim your ATM token.</p>
+                        <button id="claim-token" class="btn-primary">Claim ATM Token</button>
+                    </div>
+                    
+                    <div id="error-message" class="error-box hidden">
+                        <h3>❌ Incorrect Answer</h3>
+                        <p>Try again or generate a new puzzle.</p>
+                    </div>
+                </div>
+
+                <div id="loading" class="loading hidden">
+                    <div class="spinner"></div>
+                    <p>Processing transaction...</p>
+                </div>
+
+                <div id="transaction-result" class="transaction-result hidden">
+                    <div id="tx-success" class="success-box hidden">
+                        <h3>🎉 Token Claimed Successfully!</h3>
+                        <p>Transaction Hash: <span id="tx-hash"></span></p>
+                        <p>You now own 1 ATM token!</p>
+                    </div>
+                    
+                    <div id="tx-error" class="error-box hidden">
+                        <h3>❌ Transaction Failed</h3>
+                        <p id="tx-error-message"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-section">
+                <h3>Token Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>Total Supply</h4>
+                        <p id="total-supply">100 ATM</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Claimed Tokens</h4>
+                        <p id="claimed-count">Loading...</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Available</h4>
+                        <p id="available-count">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p><a href="index.html">← Back to Home</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // Initialize app when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePuzzleApp();
+        });
+    </script>
+</body>
+</html>
