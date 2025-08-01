@@ -451,6 +451,10 @@ footer a:hover {
     text-align: center;
 }
 
+.text-center {
+    text-align: center;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .container {
